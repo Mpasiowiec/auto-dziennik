@@ -281,11 +281,16 @@ export default function App() {
 
   // OBLICZANIE STATUSU PRZYPOMNIEŃ
   function calculateReminderStatus(reminder) {
+    // Sprawdź czy jest wpis w historii
+    const lastLog = getLastLogForReminder(reminder.name);
+    
+    // Użyj danych z logu jeśli istnieje, w przeciwnym razie z konfiguracji
+    const lastKm = lastLog ? Number(lastLog.mileage) : Number(reminder.last_km);
+    const lastDateStr = lastLog ? lastLog.date : (reminder.last_date || getTodayString());
+
     const intervalKm = Number(reminder.interval_km) || 0;
     const intervalMonths = Number(reminder.interval_months) || 0;
-    const lastKm = Number(reminder.last_km) || 0;
-    const lastDateStr = reminder.last_date || getTodayString();
-
+    
     let kmText = null;
     let timeText = null;
     let isOverdue = false;
@@ -314,7 +319,7 @@ export default function App() {
         timeText = `${Math.abs(daysRemaining)} dni po terminie`;
         isOverdue = true;
       } else {
-        timeText = `za ${daysRemaining} dni (${nextDate.toISOString().split('T')[0]})`;
+        timeText = `za ${daysRemaining} dni`;
         if (daysRemaining < 30) isWarning = true;
       }
     }
@@ -323,55 +328,16 @@ export default function App() {
     if (isOverdue) color = '#ef4444';
     else if (isWarning) color = '#f59e0b';
 
-    return { kmText, timeText, color, isOverdue, isWarning, isUrgent: isOverdue || isWarning };
+    return { kmText, timeText, color, isOverdue, isWarning, isUrgent: isOverdue || isWarning, lastDateStr };
   }
 
-  const urgentReminders = remindersList
-    .map(r => ({ ...r, status: calculateReminderStatus(r) }))
-    .filter(r => r.status.isUrgent);
+  function getLastLogForReminder(reminderName) {
+    // Szukamy logów, które zawierają nazwę przypomnienia (np. "Olej")
+    const matchingLogs = logs.filter(log => 
+      log.title.toLowerCase().includes(reminderName.toLowerCase())
+    ).sort((a, b) => new Date(b.date) - new Date(a.date));
 
-  async function handleSubmit(e) {
-    e.preventDefault();
-    let attachment_url = currentAttachmentUrl;
-
-    if (file) {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${Date.now()}.${fileExt}`;
-      const filePath = `${vehicle.id}/${fileName}`;
-      const { error: uploadError } = await supabase.storage.from('dokumenty-auta').upload(filePath, file);
-      if (!uploadError) {
-        const { data } = supabase.storage.from('dokumenty-auta').getPublicUrl(filePath);
-        attachment_url = data.publicUrl;
-      }
-    }
-
-    const mileageNum = Number(formData.mileage) || vehicle.current_mileage;
-    const payload = {
-      vehicle_id: vehicle.id,
-      date: formData.date,
-      category: formData.category,
-      title: formData.title,
-      mileage: mileageNum,
-      cost_parts: Number(formData.cost_parts) || 0,
-      cost_labor: Number(formData.cost_labor) || 0,
-      fuel_liters: formData.category === 'paliwo' ? Number(formData.fuel_liters) : null,
-      is_full_tank: formData.is_full_tank,
-      notes: formData.notes,
-      attachment_url
-    };
-
-    if (editingLogId) {
-      await supabase.from('logs').update(payload).eq('id', editingLogId);
-    } else {
-      await supabase.from('logs').insert([payload]);
-    }
-
-    if (mileageNum > vehicle.current_mileage) {
-      await supabase.from('vehicles').update({ current_mileage: mileageNum }).eq('id', vehicle.id);
-    }
-
-    setShowModal(false);
-    fetchData();
+    return matchingLogs[0] || null;
   }
 
   const filteredLogs = logs.filter(log => {
@@ -395,7 +361,7 @@ export default function App() {
   return (
     <div style={{ minHeight: '100vh', background: '#0f172a', color: '#f8fafc', fontFamily: 'system-ui, sans-serif', padding: '16px', maxWidth: '800px', margin: '0 auto' }}>
       
-      {/* NAGŁÓWEK */}
+      {/* NAGłÓWEK */}
       <header style={{ 
         display: 'flex', 
         justifyContent: 'space-between', 
@@ -423,10 +389,9 @@ export default function App() {
             <h1 style={{ fontSize: '18px', fontWeight: '800', margin: 0, color: '#f8fafc', letterSpacing: '-0.025em' }}>
               {vehicle?.name || 'Mój Pojazd'}
             </h1>
-            <div style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#94a3b8', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-              <span>Rejestracja: <strong style={{ color: '#fbbf24', background: 'rgba(251, 191, 36, 0.1)', padding: '1px 6px', borderRadius: '4px', border: '1px solid rgba(251, 191, 36, 0.2)' }}>{vehicle?.license_plate || 'Brak'}</strong></span>
-              <span style={{ color: '#475569' }}>•</span>
-              <span>Przebieg: <strong style={{ color: '#38bdf8' }}>{vehicle?.current_mileage?.toLocaleString()} km</strong></span>
+            <div style={{ margin: '6px 0 0 0', fontSize: '12px', color: '#94a3b8', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+              <div>Rejestracja: <strong style={{ color: '#fbbf24', background: 'rgba(251, 191, 36, 0.1)', padding: '1px 6px', borderRadius: '4px', border: '1px solid rgba(251, 191, 36, 0.2)' }}>{vehicle?.license_plate || 'Brak'}</strong></div>
+              <div>Przebieg: <strong style={{ color: '#38bdf8' }}>{vehicle?.current_mileage?.toLocaleString()} km</strong></div>
             </div>
           </div>
         </div>
