@@ -1,7 +1,7 @@
 {
   "name": "auto-dziennik",
   "private": true,
-  "homepage": "https://TwojLoginGitHub.github.io/auto-dziennik",
+  "homepage": "github.com/Mpasiowiec/auto-dziennik",
   "version": "0.0.0",
   "type": "module",
   "scripts": {
