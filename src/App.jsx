@@ -280,6 +280,16 @@ export default function App() {
   }
 
   // OBLICZANIE STATUSU PRZYPOMNIEŃ
+  
+  function getLastLogForReminder(reminderName) {
+    // Szukamy logów, które zawierają nazwę przypomnienia (np. "Olej")
+    const matchingLogs = logs.filter(log => 
+      log.title.toLowerCase().includes(reminderName.toLowerCase())
+    ).sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    return matchingLogs[0] || null;
+  }
+
   function calculateReminderStatus(reminder) {
     // Sprawdź czy jest wpis w historii
     const lastLog = getLastLogForReminder(reminder.name);
@@ -331,14 +341,9 @@ export default function App() {
     return { kmText, timeText, color, isOverdue, isWarning, isUrgent: isOverdue || isWarning, lastDateStr };
   }
 
-  function getLastLogForReminder(reminderName) {
-    // Szukamy logów, które zawierają nazwę przypomnienia (np. "Olej")
-    const matchingLogs = logs.filter(log => 
-      log.title.toLowerCase().includes(reminderName.toLowerCase())
-    ).sort((a, b) => new Date(b.date) - new Date(a.date));
-
-    return matchingLogs[0] || null;
-  }
+  const urgentReminders = remindersList
+    .map(r => ({ ...r, status: calculateReminderStatus(r) }))
+    .filter(r => r.status.isUrgent);
 
   const filteredLogs = logs.filter(log => {
     const matchYear = filterYear === 'all' || (log.date && log.date.startsWith(filterYear));
