@@ -1,7 +1,7 @@
 {
   "name": "auto-dziennik",
   "private": true,
-  "homepage": "github.com/Mpasiowiec/auto-dziennik",
+  "homepage": "https://Mpasiowiec.github.io/auto-dziennik",
   "version": "0.0.0",
   "type": "module",
   "scripts": {
