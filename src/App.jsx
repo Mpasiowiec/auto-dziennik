@@ -396,25 +396,50 @@ export default function App() {
     <div style={{ minHeight: '100vh', background: '#0f172a', color: '#f8fafc', fontFamily: 'system-ui, sans-serif', padding: '16px', maxWidth: '800px', margin: '0 auto' }}>
       
       {/* NAGŁÓWEK */}
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', paddingBottom: '12px', borderBottom: '1px solid #334155' }}>
-        <div>
-          <h1 style={{ fontSize: '20px', fontWeight: 'bold', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Car color="#38bdf8" /> {vehicle?.name || 'Mój Pojazd'}
-          </h1>
-          <p style={{ margin: '2px 0 0 0', fontSize: '13px', color: '#94a3b8' }}>
-            Rejestracja: <strong style={{ color: '#f59e0b' }}>{vehicle?.license_plate || 'Brak'}</strong> • Przebieg: <strong>{vehicle?.current_mileage?.toLocaleString()} km</strong>
-          </p>
+      <header style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        marginBottom: '20px', 
+        padding: '16px 20px', 
+        background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+        borderRadius: '14px',
+        border: '1px solid #334155',
+        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <div style={{ 
+            background: 'rgba(56, 189, 248, 0.1)', 
+            padding: '10px', 
+            borderRadius: '12px', 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center',
+            border: '1px solid rgba(56, 189, 248, 0.2)'
+          }}>
+            <Car color="#38bdf8" size={24} />
+          </div>
+          <div>
+            <h1 style={{ fontSize: '18px', fontWeight: '800', margin: 0, color: '#f8fafc', letterSpacing: '-0.025em' }}>
+              {vehicle?.name || 'Mój Pojazd'}
+            </h1>
+            <div style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#94a3b8', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <span>Rejestracja: <strong style={{ color: '#fbbf24', background: 'rgba(251, 191, 36, 0.1)', padding: '1px 6px', borderRadius: '4px', border: '1px solid rgba(251, 191, 36, 0.2)' }}>{vehicle?.license_plate || 'Brak'}</strong></span>
+              <span style={{ color: '#475569' }}>•</span>
+              <span>Przebieg: <strong style={{ color: '#38bdf8' }}>{vehicle?.current_mileage?.toLocaleString()} km</strong></span>
+            </div>
+          </div>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
           <button 
             onClick={() => setShowVehicleDetails(!showVehicleDetails)}
-            style={{ background: '#334155', color: '#fff', border: 'none', padding: '8px 12px', borderRadius: '8px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
+            style={{ background: '#334155', color: '#fff', border: 'none', padding: '8px 12px', borderRadius: '8px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', transition: 'background 0.2s' }}
           >
             <Settings size={16} /> Dane Auta {showVehicleDetails ? <ChevronUp size={14}/> : <ChevronDown size={14}/>}
           </button>
           <button 
             onClick={handleOpenAdd}
-            style={{ background: '#0284c7', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: '8px', fontWeight: 'bold', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
+            style={{ background: '#0284c7', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: '8px', fontWeight: 'bold', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', boxShadow: '0 2px 4px rgba(2, 132, 199, 0.3)' }}
           >
             <Plus size={16} /> Wpis
           </button>
