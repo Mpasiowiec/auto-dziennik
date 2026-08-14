@@ -345,6 +345,50 @@ export default function App() {
     .map(r => ({ ...r, status: calculateReminderStatus(r) }))
     .filter(r => r.status.isUrgent);
 
+  async function handleSubmit(e) {
+    e.preventDefault();
+    let attachment_url = currentAttachmentUrl;
+
+    if (file) {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}.${fileExt}`;
+      const filePath = `${vehicle.id}/${fileName}`;
+      const { error: uploadError } = await supabase.storage.from('dokumenty-auta').upload(filePath, file);
+      if (!uploadError) {
+        const { data } = supabase.storage.from('dokumenty-auta').getPublicUrl(filePath);
+        attachment_url = data.publicUrl;
+      }
+    }
+
+    const mileageNum = Number(formData.mileage) || vehicle.current_mileage;
+    const payload = {
+      vehicle_id: vehicle.id,
+      date: formData.date,
+      category: formData.category,
+      title: formData.title,
+      mileage: mileageNum,
+      cost_parts: Number(formData.cost_parts) || 0,
+      cost_labor: Number(formData.cost_labor) || 0,
+      fuel_liters: formData.category === 'paliwo' ? Number(formData.fuel_liters) : null,
+      is_full_tank: formData.is_full_tank,
+      notes: formData.notes,
+      attachment_url
+    };
+
+    if (editingLogId) {
+      await supabase.from('logs').update(payload).eq('id', editingLogId);
+    } else {
+      await supabase.from('logs').insert([payload]);
+    }
+
+    if (mileageNum > vehicle.current_mileage) {
+      await supabase.from('vehicles').update({ current_mileage: mileageNum }).eq('id', vehicle.id);
+    }
+
+    setShowModal(false);
+    fetchData();
+  }
+
   const filteredLogs = logs.filter(log => {
     const matchYear = filterYear === 'all' || (log.date && log.date.startsWith(filterYear));
     const matchCat = filterCategory === 'all' || log.category === filterCategory;
