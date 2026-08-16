@@ -14,6 +14,8 @@ import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { FileOpener } from '@capacitor-community/file-opener';
 
+import { oneSyncFolderService } from './oneSyncFolderService';
+
 export default function App() {
   // Funkcja pomocnicza - musi być zdefiniowana PRZED użyciem w useState
   const getTodayString = () => new Date().toISOString().split('T')[0];
@@ -71,15 +73,127 @@ export default function App() {
   const [file, setFile] = useState(null);
   const [currentAttachmentUrl, setCurrentAttachmentUrl] = useState(null);
 
+  const [oneSyncStatus, setOneSyncStatus] = useState({
+    loading: true,
+    selected: false,
+    accessible: false,
+    treeUri: null,
+    unsupported: false,
+  });
+
+  const [oneSyncStorageTest, setOneSyncStorageTest] = useState({
+    loading: false,
+    message: '',
+    fileContent: '',
+  });
+
   useEffect(() => {
     initializeApp();
   }, []);
+
+  async function refreshOneSyncFolderStatus() {
+    try {
+      const status = await oneSyncFolderService.getFolderStatus();
+      setOneSyncStatus({
+        loading: false,
+        selected: Boolean(status.selected),
+        accessible: Boolean(status.accessible),
+        treeUri: status.treeUri || null,
+        unsupported: Boolean(status.unsupported),
+      });
+    } catch (error) {
+      console.error('Error checking OneSync folder status:', error);
+
+      setOneSyncStatus({
+        loading: false,
+        selected: false,
+        accessible: false,
+        treeUri: null,
+        unsupported: false,
+        error: error.message,
+      });
+    }
+  }
+
+  async function handleSelectOneSyncFolder() {
+    try {
+      const result = await oneSyncFolderService.selectFolder();
+
+      if (result.cancelled) {
+        return;
+      }
+
+      await refreshOneSyncFolderStatus();
+
+      alert(
+        'Folder synchronizacji został wybrany. W następnym etapie dane i załączniki będą zapisywane bezpośrednio w tym folderze.'
+      );
+    } catch (error) {
+      console.error('Error selecting OneSync folder:', error);
+      alert(`Nie udało się wybrać folderu: ${error.message}`);
+    }
+  }
+
+  async function handleCheckOneSyncFolder() {
+    await refreshOneSyncFolderStatus();
+
+    if (oneSyncStatus.unsupported) {
+      alert('Ta funkcja jest obecnie dostępna tylko w aplikacji Android.');
+      return;
+    }
+
+    const status = await oneSyncFolderService.getFolderStatus();
+
+    if (!status.selected) {
+      alert('Nie wybrano jeszcze folderu synchronizacji.');
+      return;
+    }
+
+    if (status.accessible) {
+      alert('Folder jest dostępny. Aplikacja ma uprawnienie do odczytu i zapisu.');
+      return;
+    }
+
+    alert(
+      'Folder został zapamiętany, ale aplikacja nie ma już dostępu. Wybierz folder ponownie.'
+    );
+  }
+
+  async function handleInitializeOneSyncStorage() {
+    setOneSyncStorageTest({
+      loading: true,
+      message: '',
+      fileContent: '',
+    });
+
+    try {
+      const initResult = await oneSyncFolderService.initializeStorage();
+      const readResult = await oneSyncFolderService.readDataFile();
+
+      setOneSyncStorageTest({
+        loading: false,
+        message: initResult.dataFileCreated
+          ? 'Utworzono katalogi oraz testowy plik data/data.json.'
+          : 'Katalogi i plik data/data.json już istniały — odczyt zakończony powodzeniem.',
+        fileContent: readResult.content || '',
+      });
+    } catch (error) {
+      console.error('Error initializing OneSync storage:', error);
+
+      setOneSyncStorageTest({
+        loading: false,
+        message: `Błąd inicjalizacji danych OneSync: ${error.message}`,
+        fileContent: '',
+      });
+    }
+  }
 
   async function initializeApp() {
     setLoading(true);
     try {
       // Inicjalizacja DataManager - ładuje dane.json lub tworzy domyślne
       await dataManager.initialize();
+      await refreshOneSyncFolderStatus();
       fetchData();
     } catch (error) {
       console.error('Error initializing app:', error);
@@ -967,6 +1081,88 @@ export default function App() {
                     </div>
                   </div>
                 )}
+
+                <div className="sync-card">
+                  <div className="sync-card-title">
+                    Dane i synchronizacja
+                  </div>
+
+                  <div className="sync-card-description">
+                    Wybierz folder AutoDziennik synchronizowany przez OneSync.
+                    W tym etapie aplikacja tylko zapamiętuje dostęp do folderu.
+                  </div>
+
+                  <div className="sync-status-row">
+                    <span className="sync-status-label">Folder OneSync:</span>
+
+                    {oneSyncStatus.loading ? (
+                      <strong className="sync-status-pending">Sprawdzanie...</strong>
+                    ) : oneSyncStatus.unsupported ? (
+                      <strong className="sync-status-warning">
+                        Dostępne tylko w aplikacji Android
+                      </strong>
+                    ) : oneSyncStatus.selected && oneSyncStatus.accessible ? (
+                      <strong className="sync-status-ok">Wybrano — dostęp potwierdzony</strong>
+                    ) : oneSyncStatus.selected ? (
+                      <strong className="sync-status-warning">
+                        Wybrano — brak dostępu, wybierz ponownie
+                      </strong>
+                    ) : (
+                      <strong className="sync-status-warning">Nie wybrano</strong>
+                    )}
+                  </div>
+
+                  {oneSyncStatus.selected && oneSyncStatus.treeUri && (
+                    <div className="sync-folder-uri" title={oneSyncStatus.treeUri}>
+                      {oneSyncStatus.treeUri}
+                    </div>
+                  )}
+
+                  <div className="sync-actions">
+                    <button
+                      type="button"
+                      onClick={handleSelectOneSyncFolder}
+                      className="button button-primary button-small"
+                    >
+                      {oneSyncStatus.selected ? 'Zmień folder' : 'Wybierz folder synchronizacji'}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleCheckOneSyncFolder}
+                      className="button button-secondary button-small"
+                    >
+                      Sprawdź dostęp
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleInitializeOneSyncStorage}
+                      className="button button-success button-small"
+                      disabled={!oneSyncStatus.selected || oneSyncStorageTest.loading}
+                    >
+                      {oneSyncStorageTest.loading
+                        ? 'Tworzenie katalogów...'
+                        : 'Utwórz i sprawdź pliki'}
+                    </button>
+                  </div>
+                  {oneSyncStorageTest.message && (
+                    <div
+                      className={
+                        oneSyncStorageTest.message.startsWith('Błąd')
+                          ? 'sync-test-result sync-test-error'
+                          : 'sync-test-result sync-test-success'
+                      }
+                    >
+                      <div>{oneSyncStorageTest.message}</div>
+
+                      {oneSyncStorageTest.fileContent && (
+                        <pre className="sync-test-content">
+                          {oneSyncStorageTest.fileContent}
+                        </pre>
+                      )}
+                    </div>
+                  )}
+                </div>
 
                 <div className="backup-row">
                   <span className="backup-label">Kopia zapasowa danych:</span>
