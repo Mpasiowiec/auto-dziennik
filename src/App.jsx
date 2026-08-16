@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from './supabaseClient';
+import { dataManager } from './dataManager';
+import { fileSystemService } from './fileSystemServiceWeb';
+import ImageCompression from './imageCompression';
 import { 
   Car, Fuel, Wrench, Plus, FileText, DollarSign, Edit2, Trash2, 
   Settings, ChevronDown, ChevronUp, Save, Trash, Calendar, Bell, 
@@ -7,6 +9,9 @@ import {
 } from 'lucide-react';
 
 export default function App() {
+  // Funkcja pomocnicza - musi być zdefiniowana PRZED użyciem w useState
+  const getTodayString = () => new Date().toISOString().split('T')[0];
+
   const [vehicle, setVehicle] = useState(null);
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -44,7 +49,6 @@ export default function App() {
   });
 
   const [partsList, setPartsList] = useState([]);
-  const getTodayString = () => new Date().toISOString().split('T')[0];
 
   // Formularz logu
   const [formData, setFormData] = useState({
@@ -62,63 +66,65 @@ export default function App() {
   const [currentAttachmentUrl, setCurrentAttachmentUrl] = useState(null);
 
   useEffect(() => {
-    fetchData();
+    initializeApp();
   }, []);
+
+  async function initializeApp() {
+    setLoading(true);
+    try {
+      // Inicjalizacja DataManager - ładuje dane.json lub tworzy domyślne
+      await dataManager.initialize();
+      fetchData();
+    } catch (error) {
+      console.error('Error initializing app:', error);
+      setLoading(false);
+    }
+  }
 
   async function fetchData() {
     setLoading(true);
-    let { data: vehicles } = await supabase.from('vehicles').select('*');
-    
-    const defaultReminders = [
-      { id: '1', name: 'Wymiana Oleju i Filtrów', interval_km: 15000, interval_months: 12, last_km: 145000, last_date: '2025-08-10' },
-      { id: '2', name: 'Przegląd Techniczny', interval_km: 0, interval_months: 12, last_km: 0, last_date: '2025-09-01' },
-      { id: '3', name: 'Ubezpieczenie OC/AC', interval_km: 0, interval_months: 12, last_km: 0, last_date: '2025-01-14' },
-      { id: '4', name: 'Wymiana Rozrządu', interval_km: 90000, interval_months: 60, last_km: 210000, last_date: '2022-05-15' }
-    ];
+    try {
+      // Pobranie pojazdu z lokalnego storage
+      const currentCar = dataManager.getVehicle();
+      const safeVehicle = currentCar && typeof currentCar === 'object' ? currentCar : {
+        id: '1',
+        name: 'Mój Samochód',
+        license_plate: '',
+        vin: '',
+        engine_code: '',
+        oil_spec: '',
+        current_mileage: 0,
+        inspection_date: '',
+        insurance_date: '',
+        parts_list: [],
+        reminders_list: [],
+      };
 
-    if (!vehicles || vehicles.length === 0) {
-      const { data: newCar } = await supabase
-        .from('vehicles')
-        .insert([{ 
-          name: 'Mój Samochód', 
-          current_mileage: 150000,
-          oil_spec: '5W30 VW 507.00 - 4.3L',
-          reminders_list: defaultReminders,
-          parts_list: [
-            { id: '1', name: 'Filtr Oleju', code: 'MANN HU711/51x' },
-            { id: '2', name: 'Filtr Powietrza', code: 'BOSCH F026400010' }
-          ]
-        }])
-        .select();
-      vehicles = newCar;
+      setVehicle(safeVehicle);
+
+      setVehicleForm({
+        name: safeVehicle.name || '',
+        license_plate: safeVehicle.license_plate || '',
+        vin: safeVehicle.vin || '',
+        engine_code: safeVehicle.engine_code || '',
+        oil_spec: safeVehicle.oil_spec || '',
+        current_mileage: safeVehicle.current_mileage || 0,
+        inspection_date: safeVehicle.inspection_date || '',
+        insurance_date: safeVehicle.insurance_date || ''
+      });
+
+      setPartsList(Array.isArray(safeVehicle.parts_list) ? safeVehicle.parts_list : []);
+      setRemindersList(Array.isArray(safeVehicle.reminders_list) && safeVehicle.reminders_list.length > 0 ? safeVehicle.reminders_list : []);
+
+      // Pobranie logów z lokalnego storage
+      const logsData = Array.isArray(dataManager.getLogs()) ? dataManager.getLogs() : [];
+      setLogs(logsData);
+
+      setLoading(false);
+    } catch (error) {
+      console.error('Error fetching data:', error);
+      setLoading(false);
     }
-
-    const currentCar = vehicles[0];
-    setVehicle(currentCar);
-    
-    setVehicleForm({
-      name: currentCar.name || '',
-      license_plate: currentCar.license_plate || '',
-      vin: currentCar.vin || '',
-      engine_code: currentCar.engine_code || '',
-      oil_spec: currentCar.oil_spec || '',
-      current_mileage: currentCar.current_mileage || 0,
-      inspection_date: currentCar.inspection_date || '',
-      insurance_date: currentCar.insurance_date || ''
-    });
-
-    setPartsList(Array.isArray(currentCar.parts_list) ? currentCar.parts_list : []);
-    setRemindersList(Array.isArray(currentCar.reminders_list) && currentCar.reminders_list.length > 0 ? currentCar.reminders_list : defaultReminders);
-
-    if (currentCar) {
-      const { data: logsData } = await supabase
-        .from('logs')
-        .select('*')
-        .eq('vehicle_id', currentCar.id)
-        .order('date', { ascending: false });
-      setLogs(logsData || []);
-    }
-    setLoading(false);
   }
 
   // ZARZĄDZANIE PRZYPOMNIENIAMI
@@ -150,31 +156,36 @@ export default function App() {
     setPartsList(partsList.filter(part => part.id !== id));
   }
 
-  // ZAPIS AUTA ORAZ ZAPIS PRZYPOMNIEŃ DO SUPABASE
+  // ZAPIS AUTA ORAZ ZAPIS PRZYPOMNIEŃ DO LOKALNEGO STORAGE
   async function handleSaveVehicle(e) {
     e.preventDefault();
-    const updatedMileage = Number(vehicleForm.current_mileage) || vehicle.current_mileage;
-    const cleanedParts = partsList.filter(p => p.name.trim() !== '' || p.code.trim() !== '');
-    const cleanedReminders = remindersList.filter(r => r.name.trim() !== '');
+    try {
+      const updatedMileage = Number(vehicleForm.current_mileage) || vehicle.current_mileage;
+      const cleanedParts = partsList.filter(p => p.name.trim() !== '' || p.code.trim() !== '');
+      const cleanedReminders = remindersList.filter(r => r.name.trim() !== '');
 
-    const { error } = await supabase.from('vehicles').update({
-      name: vehicleForm.name,
-      license_plate: vehicleForm.license_plate,
-      vin: vehicleForm.vin,
-      engine_code: vehicleForm.engine_code,
-      oil_spec: vehicleForm.oil_spec,
-      current_mileage: updatedMileage,
-      inspection_date: vehicleForm.inspection_date || null,
-      insurance_date: vehicleForm.insurance_date || null,
-      parts_list: cleanedParts,
-      reminders_list: cleanedReminders
-    }).eq('id', vehicle.id);
+      const result = await dataManager.updateVehicle({
+        name: vehicleForm.name,
+        license_plate: vehicleForm.license_plate,
+        vin: vehicleForm.vin,
+        engine_code: vehicleForm.engine_code,
+        oil_spec: vehicleForm.oil_spec,
+        current_mileage: updatedMileage,
+        inspection_date: vehicleForm.inspection_date || null,
+        insurance_date: vehicleForm.insurance_date || null,
+        parts_list: cleanedParts,
+        reminders_list: cleanedReminders
+      });
 
-    if (!error) {
-      setIsEditingVehicle(false);
-      fetchData();
-    } else {
-      alert('Błąd podczas zapisywania w bazie danych: ' + error.message);
+      if (result.success) {
+        setIsEditingVehicle(false);
+        fetchData();
+      } else {
+        alert('Błąd podczas zapisywania danych: ' + result.error);
+      }
+    } catch (error) {
+      console.error('Error saving vehicle:', error);
+      alert('Błąd podczas zapisywania: ' + error.message);
     }
   }
 
@@ -224,8 +235,17 @@ export default function App() {
 
   async function handleDelete(id) {
     if (window.confirm('Czy na pewno chcesz usunąć ten wpis z historii?')) {
-      await supabase.from('logs').delete().eq('id', id);
-      fetchData();
+      try {
+        const result = await dataManager.deleteLog(id);
+        if (result.success) {
+          fetchData();
+        } else {
+          alert('Błąd podczas usuwania wpisu');
+        }
+      } catch (error) {
+        console.error('Error deleting log:', error);
+        alert('Błąd podczas usuwania: ' + error.message);
+      }
     }
   }
 
@@ -347,46 +367,102 @@ export default function App() {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    let attachment_url = currentAttachmentUrl;
+    try {
+      let attachment_path = currentAttachmentUrl;
 
-    if (file) {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${Date.now()}.${fileExt}`;
-      const filePath = `${vehicle.id}/${fileName}`;
-      const { error: uploadError } = await supabase.storage.from('dokumenty-auta').upload(filePath, file);
-      if (!uploadError) {
-        const { data } = supabase.storage.from('dokumenty-auta').getPublicUrl(filePath);
-        attachment_url = data.publicUrl;
+      // Obsługa zdjęć i plików - kompresja + zapis do lokalnego systemu
+      if (file) {
+        // Kompresja zdjęcia jeśli to obraz
+        if (ImageCompression.isImageFile(file)) {
+          try {
+            const compressedBlob = await ImageCompression.compressFile(file, 1024, 1024, 0.8);
+            const compressedFile = ImageCompression.blobToFile(compressedBlob, file.name);
+            
+            const saveResult = await fileSystemService.savePhotoLocally(
+              compressedFile, 
+              vehicle.id,
+              { maxWidth: 1024, maxHeight: 1024, quality: 0.8 }
+            );
+            
+            if (saveResult.success) {
+              attachment_path = saveResult.path;
+            } else {
+              alert('Błąd podczas zapisywania zdjęcia: ' + saveResult.error);
+              return;
+            }
+          } catch (error) {
+            console.error('Error compressing/saving image:', error);
+            alert('Błąd podczas przetwarzania zdjęcia');
+            return;
+          }
+        } else {
+          // Jeśli nie jest to obraz, zapisz normalnie (bez kompresji)
+          const fileExt = file.name.split('.').pop();
+          const fileName = `attachment_${Date.now()}.${fileExt}`;
+          const dirPath = `vehicle_files/${vehicle.id}`;
+          
+          try {
+            const { Filesystem, Directory } = await import('@capacitor/filesystem');
+            const base64Data = await new Promise((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onloadend = () => resolve(reader.result.split(',')[1]);
+              reader.onerror = reject;
+              reader.readAsDataURL(file);
+            });
+
+            await Filesystem.writeFile({
+              path: `${dirPath}/${fileName}`,
+              data: base64Data,
+              directory: Directory.Documents,
+              recursive: true,
+            });
+
+            attachment_path = `${dirPath}/${fileName}`;
+          } catch (error) {
+            console.error('Error saving file:', error);
+            alert('Błąd podczas zapisywania pliku');
+            return;
+          }
+        }
       }
+
+      const currentVehicle = vehicle || dataManager.getVehicle();
+      const mileageNum = Number(formData.mileage) || Number(currentVehicle?.current_mileage || 0);
+      const payload = {
+        date: formData.date,
+        category: formData.category,
+        title: formData.title,
+        mileage: mileageNum,
+        cost_parts: Number(formData.cost_parts) || 0,
+        cost_labor: Number(formData.cost_labor) || 0,
+        fuel_liters: formData.category === 'paliwo' ? Number(formData.fuel_liters) : null,
+        is_full_tank: formData.is_full_tank,
+        notes: formData.notes,
+        attachment_url: attachment_path
+      };
+
+      let result;
+      if (editingLogId) {
+        result = await dataManager.updateLog(editingLogId, payload);
+      } else {
+        result = await dataManager.addLog(payload);
+      }
+
+      if (result.success) {
+        // Aktualizacja przebiegu pojazdu jeśli nowy przebieg jest większy
+        if (currentVehicle && mileageNum > Number(currentVehicle.current_mileage || 0)) {
+          await dataManager.updateMileage(mileageNum);
+        }
+
+        setShowModal(false);
+        fetchData();
+      } else {
+        alert('Błąd podczas zapisywania wpisu: ' + result.error);
+      }
+    } catch (error) {
+      console.error('Error in handleSubmit:', error);
+      alert('Błąd podczas zapisywania: ' + error.message);
     }
-
-    const mileageNum = Number(formData.mileage) || vehicle.current_mileage;
-    const payload = {
-      vehicle_id: vehicle.id,
-      date: formData.date,
-      category: formData.category,
-      title: formData.title,
-      mileage: mileageNum,
-      cost_parts: Number(formData.cost_parts) || 0,
-      cost_labor: Number(formData.cost_labor) || 0,
-      fuel_liters: formData.category === 'paliwo' ? Number(formData.fuel_liters) : null,
-      is_full_tank: formData.is_full_tank,
-      notes: formData.notes,
-      attachment_url
-    };
-
-    if (editingLogId) {
-      await supabase.from('logs').update(payload).eq('id', editingLogId);
-    } else {
-      await supabase.from('logs').insert([payload]);
-    }
-
-    if (mileageNum > vehicle.current_mileage) {
-      await supabase.from('vehicles').update({ current_mileage: mileageNum }).eq('id', vehicle.id);
-    }
-
-    setShowModal(false);
-    fetchData();
   }
 
   const filteredLogs = logs.filter(log => {
