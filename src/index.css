@@ -109,3 +109,58 @@ code {
   padding: 4px 8px;
   background: var(--code-bg);
 }
+
+/* =========================================================
+   Android / mobile: globalne zabezpieczenia wymiarów
+   ========================================================= */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  min-width: 0;
+  min-height: 100%;
+  margin: 0;
+}
+
+#root {
+  min-width: 0;
+  min-height: 100%;
+}
+
+html,
+body {
+  overflow-x: hidden;
+}
+
+body {
+  min-height: 100dvh;
+  overscroll-behavior-x: none;
+}
+
+button,
+input,
+select,
+textarea {
+  max-width: 100%;
+  min-width: 0;
+  font: inherit;
+}
+
+img,
+svg,
+canvas,
+video {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+input[type="date"] {
+  min-width: 0;
+}
